@@ -412,3 +412,14 @@ function startLocationTracking() {
     updateLocation(); // Initial call
     locationInterval = setInterval(updateLocation, 30000);
 }
+
+
+try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+        console.error("Supabase Auth Error:", error.message); // This will print the specific reason
+        throw error;
+    }
+} catch (error) {
+    showToast(error.message, "error");
+}
