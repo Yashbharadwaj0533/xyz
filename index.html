@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field Engineer Portal</title>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Leaflet Map JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- 1. LOGIN VIEW -->
+    <div id="login-view" class="view active">
+        <div class="login-container">
+            <div class="login-header">
+                <i class="fa-solid fa-helmet-safety fa-3x text-primary"></i>
+                <h2>Field Portal Login</h2>
+                <p>Sign in to access your dashboard</p>
+            </div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" required placeholder="name@company.com">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block" id="login-btn">
+                    Sign In <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. MAIN APP LAYOUT (Sidebar + Content) -->
+    <div id="app-layout" class="view hidden">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fa-solid fa-helmet-safety"></i>
+                <span>Field Portal</span>
+            </div>
+            
+            <div class="sidebar-user">
+                <div class="user-avatar"><i class="fa-solid fa-user"></i></div>
+                <div class="user-info">
+                    <h4 id="sidebar-user-name">Loading...</h4>
+                    <span id="sidebar-user-role" class="badge">Role</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <!-- Admin Links -->
+                <ul id="nav-admin" class="hidden">
+                    <li><a href="#" class="nav-item active" data-target="admin-complaints"><i class="fa-solid fa-clipboard-list"></i> Complaints</a></li>
+                    <li><a href="#" class="nav-item" data-target="admin-map"><i class="fa-solid fa-map-location-dot"></i> Live Tracking</a></li>
+                </ul>
+                
+                <!-- Engineer Links -->
+                <ul id="nav-engineer" class="hidden">
+                    <li><a href="#" class="nav-item active" data-target="engineer-complaints"><i class="fa-solid fa-clipboard-check"></i> My Assigned Jobs</a></li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button id="logout-btn" class="btn-outline"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- ADMIN: Complaints Management -->
+            <section id="admin-complaints" class="dashboard-section active">
+                <div class="section-header">
+                    <h2>Complaint Management</h2>
+                    <button class="btn btn-primary" id="btn-new-complaint"><i class="fa-solid fa-plus"></i> New Complaint</button>
+                </div>
+
+                <!-- Create Complaint Modal/Form -->
+                <div id="create-complaint-panel" class="card hidden mb-4">
+                    <h3>Dispatch New Job</h3>
+                    <form id="create-complaint-form">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Customer Name</label>
+                                <input type="text" id="c-customer" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Issue Description</label>
+                                <input type="text" id="c-issue" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Priority</label>
+                                <select id="c-priority" required>
+                                    <option value="Low">Low</option>
+                                    <option value="Medium" selected>Medium</option>
+                                    <option value="High">High</option>
+                                    <option value="Critical">Critical</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Assign Engineer</label>
+                                <select id="c-engineer" required>
+                                    <option value="">Loading engineers...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-outline" id="btn-cancel-complaint">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Dispatch</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="filters-bar mb-4" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                        <input type="text" id="search-complaints" placeholder="Search Ticket ID or Customer...">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0; min-width: 150px;">
+                        <select id="filter-status">
+                            <option value="All">All Statuses</option>
+                            <option value="Assigned">Assigned</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Ticket ID</th>
+                                    <th>Customer</th>
+                                    <th>Issue</th>
+                                    <th>Priority</th>
+                                    <th>Assigned To</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-complaints-list">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ADMIN: Live Tracking Map -->
+            <section id="admin-map" class="dashboard-section hidden">
+                <div class="section-header">
+                    <h2>Engineer Live Tracking</h2>
+                    <span class="badge badge-success"><i class="fa-solid fa-satellite-dish"></i> Live Updates</span>
+                </div>
+                <div class="card map-card">
+                    <div id="map"></div>
+                </div>
+            </section>
+
+            <!-- ENGINEER: My Assigned Jobs -->
+            <section id="engineer-complaints" class="dashboard-section hidden">
+                <div class="section-header">
+                    <h2>My Assigned Jobs</h2>
+                    <div class="login-time-tracker">
+                        Session started: <span id="session-time">--:--</span>
+                    </div>
+                </div>
+                
+                <div class="tracking-status card mb-4">
+                    <div class="d-flex align-center">
+                        <div class="status-indicator active pulse"></div>
+                        <span id="geo-status-text">Location tracking active. Updating every 30s.</span>
+                    </div>
+                </div>
+
+                <div class="grid-cards" id="engineer-complaints-list">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- App Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
