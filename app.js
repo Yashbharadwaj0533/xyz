@@ -1,7 +1,7 @@
 // --- SUPABASE CONFIGURATION ---
 // IMPORTANT: Add your Supabase URL and Anon Key here
 const SUPABASE_URL = 'https://tgmxpawrrsxphsmsqfyz.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkcnhxb2hqcXBvcXJ0dnlhaW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMyOTYxMTIsImV4cCI6MjA1ODg3MjExMn0.sW2K-rC3x84lCqg9uO7T_82eWbY6zYhH1O7L6Z3x8_Q';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnbXhwYXdycnN4cGhzbXNxZnl6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzOTM1MjksImV4cCI6MjA5MTk2OTUyOX0.lbNzIShVRTjkPNsFmH1pBGX6KuI2F7eR1qcKPcD6M3E';
 
 let supabaseClient = null;
 try {
