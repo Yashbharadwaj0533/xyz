@@ -27,6 +27,20 @@ const appLayout = document.getElementById('app-layout');
 const loginForm = document.getElementById('login-form');
 const logoutBtn = document.getElementById('logout-btn');
 
+let isSignUpMode = false;
+const toggleAuthBtn = document.getElementById('toggle-auth');
+const signupFields = document.getElementById('signup-fields');
+const authTitle = document.getElementById('auth-title');
+const btnText = document.getElementById('btn-text');
+
+toggleAuthBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    isSignUpMode = !isSignUpMode;
+    signupFields.classList.toggle('hidden');
+    authTitle.textContent = isSignUpMode ? "Create Account" : "Field Portal Login";
+    btnText.textContent = isSignUpMode ? "Sign Up" : "Sign In";
+});
+
 // Sidebar
 const navAdmin = document.getElementById('nav-admin');
 const navEngineer = document.getElementById('nav-engineer');
@@ -68,6 +82,38 @@ navItems.forEach(item => {
     });
 });
 
+
+
+// --- AUTHENTICATION STATE ---
+async function handleLogin(user) {
+    currentUser = user;
+
+    // Use maybeSingle() to avoid the "0 rows" error crash
+    const { data, error } = await supabaseClient
+        .from('engineers')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle(); 
+
+    if (error) {
+        console.error("Profile Load Error:", error);
+        return;
+    }
+
+    if (!data) {
+        // If we are in signup mode, we wait for the insert. 
+        // If we are in login mode and this happens, the user profile is missing.
+        if (!isSignUpMode) {
+            showToast("Profile not found. Please Sign Up.", "error");
+            await supabaseClient.auth.signOut();
+        }
+        return;
+    }
+
+    currentProfile = data;
+    // ... rest of your UI update logic
+}
+
 // --- AUTHENTICATION ---
 if (supabaseClient) {
     supabaseClient.auth.onAuthStateChange((event, session) => {
@@ -85,20 +131,48 @@ loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
+    const fullName = document.getElementById('full-name')?.value;
+    const empId = document.getElementById('signup-employee-id')?.value;
     const btn = document.getElementById('login-btn');
 
-    btn.innerHTML = 'Signing in...';
     btn.disabled = true;
+    btn.innerHTML = isSignUpMode ? 'Creating Account...' : 'Signing in...';
 
     try {
-        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        // onAuthStateChange will trigger handleLogin
+        if (isSignUpMode) {
+            // Sign Up Process
+            // Change this line:
+const { data, error } = await supabaseClient.from('engineers').select('*').eq('id', user.id).maybeSingle();
+            if (error) throw error;
+
+            if (data.user) {
+                const { error: pError } = await supabaseClient.from('engineers').insert([{
+                    id: data.user.id,
+                    name: fullName,
+                    employee_id: empId,
+                    role: 'engineer'
+                }]);
+if (error) {
+    console.error(error);
+    return;
+}
+
+// ADD THIS BLOCK:
+if (!data) {
+    console.log("Profile not found yet, waiting for signup to finish...");
+    return; 
+}                showToast("Account created! Check email for verification.");
+            }
+        } else {
+            // Login Process
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+        }
     } catch (error) {
         showToast(error.message, "error");
     } finally {
-        btn.innerHTML = 'Sign In <i class="fa-solid fa-arrow-right"></i>';
         btn.disabled = false;
+        btn.innerHTML = isSignUpMode ? 'Sign Up' : 'Sign In <i class="fa-solid fa-arrow-right"></i>';
     }
 });
 
@@ -110,7 +184,11 @@ async function handleLogin(user) {
     currentUser = user;
 
     // Fetch user profile/role
-    const { data, error } = await supabaseClient.from('engineers').select('*').eq('id', user.id).single();
+    const { data, error } = await supabaseClient
+    .from('engineers')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle(); // <--- This allows 0 rows without crashing
 
     if (error) {
         console.error(error);
@@ -121,9 +199,25 @@ async function handleLogin(user) {
     currentProfile = data;
 
     // Update UI
+    // 1. Guard against null data (crucial for Sign Up)
+    if (!data) {
+        console.log("No profile found yet.");
+        return; 
+    }
+
+    currentProfile = data;
+
+    // 2. Only update UI if currentProfile actually exists
     loginView.classList.add('hidden');
     appLayout.classList.remove('hidden');
-    sidebarUserName.textContent = currentProfile.name;
+    
+    if (sidebarUserName) {
+        sidebarUserName.textContent = currentProfile.name || "User";
+    }
+    
+    if (sidebarUserRole) {
+        sidebarUserRole.textContent = (currentProfile.role || "engineer").toUpperCase();
+    }
     sidebarUserRole.textContent = currentProfile.role.toUpperCase();
 
     if (currentProfile.role === 'admin') {
@@ -150,6 +244,7 @@ function handleLogout() {
     if (locationInterval) clearInterval(locationInterval);
 }
 
+
 // --- ADMIN LOGIC ---
 async function initAdmin() {
     loadComplaints();
@@ -164,29 +259,64 @@ async function initAdmin() {
     document.getElementById('btn-cancel-complaint').addEventListener('click', () => {
         document.getElementById('create-complaint-panel').classList.add('hidden');
     });
-}
+} // This closes initAdmin
 
 async function loadEngineersForDropdown() {
-    const { data, error } = await supabaseClient.from('engineers').select('*').eq('role', 'engineer');
-    if (error) return;
+    const { data, error } = await supabaseClient
+        .from('engineers')
+        .select('*')
+        .eq('role', 'engineer');
 
-    engineerSelect.innerHTML = '<option value="">Select Engineer</option>';
-    data.forEach(eng => {
-        engineerSelect.innerHTML += `<option value="${eng.id}">${eng.name} (${eng.employeeId})</option>`;
-    });
-}
+    if (error) {
+        console.error("Error loading engineers:", error);
+        return;
+    }
+
+    const engineerSelect = document.getElementById('c-engineer');
+    if (engineerSelect) {
+        engineerSelect.innerHTML = '<option value="">Select Engineer</option>';
+        data.forEach(eng => {
+            const empId = eng.employee_id || eng.employeeId || 'N/A';
+            engineerSelect.innerHTML += `<option value="${eng.id}">${eng.name} (${empId})</option>`;
+        });
+    }
+} // This closes loadEngineersForDropdown
+
+async function loadComplaints() {
+    try {
+        const { data: complaints, error } = await supabaseClient
+            .from('complaints')
+            .select(`
+                *,
+                engineers!assignedEngineer (
+                    name
+                )
+            `)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        allComplaints = complaints;
+        renderComplaints();
+    } catch (error) {
+        console.error("Detailed Query Error:", error);
+    }
+} // This closes loadComplaints
+
+
 
 createComplaintForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = createComplaintForm.querySelector('button[type="submit"]');
     btn.disabled = true;
 
+    // IMPORTANT: Ensure these keys match your Supabase column names EXACTLY
     const newComplaint = {
         ticketId: 'TKT-' + Math.floor(Math.random() * 10000),
         customerName: document.getElementById('c-customer').value,
         issue: document.getElementById('c-issue').value,
         priority: document.getElementById('c-priority').value,
-        assignedEngineer: document.getElementById('c-engineer').value,
+        assignedEngineer: document.getElementById('c-engineer').value, // Check if this should be assigned_engineer
         status: 'Assigned'
     };
 
@@ -197,8 +327,9 @@ createComplaintForm.addEventListener('submit', async (e) => {
         showToast("Complaint dispatched successfully");
         createComplaintForm.reset();
         document.getElementById('create-complaint-panel').classList.add('hidden');
-        loadComplaints(); // Refresh list
+        loadComplaints(); 
     } catch (error) {
+        console.error("Insert Error:", error);
         showToast(error.message, "error");
     } finally {
         btn.disabled = false;
@@ -206,18 +337,22 @@ createComplaintForm.addEventListener('submit', async (e) => {
 });
 
 async function loadComplaints() {
-    const { data: complaints, error } = await supabaseClient
-        .from('complaints')
-        .select(`*, engineers(name)`)
-        .order('created_at', { ascending: false });
+    try {
+        const { data: complaints, error } = await supabaseClient
+            .from('complaints')
+            .select(`
+                *,
+                engineers!assignedEngineer ( name )
+            `) // If your column is assigned_engineer, change it here too
+            .order('created_at', { ascending: false });
 
-    if (error) {
-        console.error(error);
-        return;
+        if (error) throw error;
+
+        allComplaints = complaints;
+        renderComplaints();
+    } catch (error) {
+        console.error("Load Complaints Error:", error);
     }
-
-    allComplaints = complaints;
-    renderComplaints();
 }
 
 function renderComplaints() {
@@ -292,30 +427,40 @@ function updateMarker(locationData) {
 }
 
 // Supabase Realtime
+// --- FIXED SUPABASE REALTIME ---
 function subscribeToData() {
-    // Listen for new complaints
-    supabaseClient.channel('public:complaints').on('postgres_changes', { event: '*', schema: 'public', table: 'complaints' }, payload => {
-        loadComplaints();
-    }).subscribe();
+    // 1. Clean up any existing channels first
+    supabaseClient.removeAllChannels();
 
-    // Listen for location updates
-    supabaseClient.channel('public:engineer_tracking').on('postgres_changes', { event: '*', schema: 'public', table: 'engineer_tracking' }, async payload => {
-        // Fetch engineer name to update marker properly
-        const { data } = await supabaseClient.from('engineers').select('name').eq('id', payload.new.engineerId).single();
-        if (data) {
-            payload.new.engineers = data;
-            updateMarker(payload.new);
-        }
-    }).subscribe();
+    // 2. Create the channel and chain ALL .on() calls BEFORE .subscribe()
+    supabaseClient
+        .channel('admin-complaints-channel')
+        .on(
+            'postgres_changes', 
+            { event: '*', schema: 'public', table: 'complaints' }, 
+            (payload) => {
+                console.log('Change received!', payload);
+                loadComplaints();
+            }
+        )
+        .on(
+            'postgres_changes', 
+            { event: '*', schema: 'public', table: 'engineer_tracking' }, 
+            async (payload) => {
+                // Handle tracking updates here
+                updateMarker(payload.new);
+            }
+        )
+        .subscribe((status) => {
+            console.log("Subscription status:", status);
+        });
 }
-
 
 // --- ENGINEER LOGIC ---
 async function initEngineer() {
     const now = new Date();
     document.getElementById('session-time').textContent = now.toLocaleTimeString();
 
-    // Log login time to tracking table
     await supabaseClient.from('engineer_tracking').upsert({
         engineerId: currentUser.id,
         loginTime: now.toISOString(),
@@ -325,10 +470,25 @@ async function initEngineer() {
     loadEngineerJobs();
     startLocationTracking();
 
-    // Listen for my job updates
-    supabaseClient.channel('engineer_jobs').on('postgres_changes', { event: '*', schema: 'public', table: 'complaints', filter: `assignedEngineer=eq.${currentUser.id}` }, payload => {
-        loadEngineerJobs();
-    }).subscribe();
+    // Clean up existing to prevent errors
+    supabaseClient.removeAllChannels();
+
+    // Listen for my specific job updates
+    supabaseClient
+        .channel('engineer-jobs-channel')
+        .on(
+            'postgres_changes', 
+            { 
+                event: '*', 
+                schema: 'public', 
+                table: 'complaints', 
+                filter: `assignedEngineer=eq.${currentUser.id}` 
+            }, 
+            payload => {
+                loadEngineerJobs();
+            }
+        )
+        .subscribe();
 }
 
 async function loadEngineerJobs() {
@@ -412,6 +572,5 @@ function startLocationTracking() {
     updateLocation(); // Initial call
     locationInterval = setInterval(updateLocation, 30000);
 }
-
 
 
